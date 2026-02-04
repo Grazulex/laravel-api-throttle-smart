@@ -6,7 +6,7 @@ use Grazulex\ThrottleSmart\Attributes\QuotaCost;
 use Grazulex\ThrottleSmart\Attributes\RateLimit;
 
 it('creates RateLimit attribute with default values', function (): void {
-    $attribute = new RateLimit();
+    $attribute = new RateLimit;
 
     expect($attribute->perSecond)->toBeNull()
         ->and($attribute->perMinute)->toBeNull()
@@ -56,7 +56,7 @@ it('creates RateLimit attribute with custom scope', function (): void {
 });
 
 it('creates QuotaCost attribute with default value', function (): void {
-    $attribute = new QuotaCost();
+    $attribute = new QuotaCost;
 
     expect($attribute->cost)->toBe(1);
 });

@@ -57,7 +57,7 @@ it('gets limits for anonymous user', function (): void {
 });
 
 it('gets limits for user with plan attribute', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->plan = 'pro';
 
@@ -71,7 +71,7 @@ it('gets limits for user with plan attribute', function (): void {
 });
 
 it('detects when user is limited', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->plan = 'free';
 
@@ -85,7 +85,7 @@ it('detects when user is limited', function (): void {
 });
 
 it('gets remaining for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->plan = 'free';
 
@@ -98,7 +98,7 @@ it('gets remaining for user', function (): void {
 });
 
 it('returns max int for unlimited', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->plan = 'free';
 
@@ -109,7 +109,7 @@ it('returns max int for unlimited', function (): void {
 });
 
 it('gets quota for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->plan = 'free';
 
@@ -122,7 +122,7 @@ it('gets quota for user', function (): void {
 });
 
 it('consumes quota', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->driver->shouldReceive('incrementQuota')
@@ -143,7 +143,7 @@ it('resets rate limits', function (): void {
 });
 
 it('resets quota for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->driver->shouldReceive('resetQuota')
@@ -155,7 +155,7 @@ it('resets quota for user', function (): void {
 });
 
 it('adds quota to user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->driver->shouldReceive('getQuota')
@@ -170,7 +170,7 @@ it('adds quota to user', function (): void {
 });
 
 it('checks if request would be limited', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->plan = 'free';
 
@@ -186,7 +186,7 @@ it('checks if request would be limited', function (): void {
 });
 
 it('checks if request would be limited when over limit', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->plan = 'free';
 
@@ -224,7 +224,7 @@ it('bypasses request by API key', function (): void {
 });
 
 it('bypasses request by user ID', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 999;
 
     $request = Mockery::mock(Request::class);
@@ -238,7 +238,7 @@ it('bypasses request by user ID', function (): void {
 });
 
 it('bypasses request by user attribute', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->is_admin = true;
 
@@ -253,7 +253,7 @@ it('bypasses request by user attribute', function (): void {
 });
 
 it('does not bypass normal request', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->is_admin = false;
 
@@ -279,7 +279,7 @@ it('uses custom plan resolver', function (): void {
 });
 
 it('sets user context with forUser', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
     $user->plan = 'pro';
 
