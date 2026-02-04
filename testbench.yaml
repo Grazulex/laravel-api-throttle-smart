@@ -1,0 +1,4 @@
+providers:
+  - Grazulex\ThrottleSmart\ThrottleSmartServiceProvider
+
+migrations: false

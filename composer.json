@@ -1,0 +1,106 @@
+{
+    "name": "grazulex/laravel-api-throttle-smart",
+    "description": "Intelligent, plan-aware rate limiting for Laravel APIs - Built for SaaS, multi-tenant, and enterprise applications",
+    "keywords": [
+        "laravel",
+        "api",
+        "rate-limiting",
+        "throttle",
+        "quota",
+        "saas",
+        "multi-tenant",
+        "middleware"
+    ],
+    "homepage": "https://github.com/grazulex/laravel-api-throttle-smart",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Jean-Marc Strauven",
+            "email": "jms@grazulex.be",
+            "homepage": "https://grazulex.be",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/contracts": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/routing": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0",
+        "illuminate/cache": "^11.0|^12.0",
+        "illuminate/redis": "^11.0|^12.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.22",
+        "orchestra/testbench": "^9.0|^10.0",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0",
+        "phpstan/phpstan": "^2.0",
+        "rector/rector": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Grazulex\\ThrottleSmart\\": "src/"
+        },
+        "files": [
+            "src/Support/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Grazulex\\ThrottleSmart\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "@clear",
+            "@prepare"
+        ],
+        "clear": "@php vendor/bin/testbench package:purge-skeleton --ansi",
+        "prepare": "@php vendor/bin/testbench package:discover --ansi",
+        "build": "@php vendor/bin/testbench workbench:build --ansi",
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "@build",
+            "@php vendor/bin/testbench serve --ansi"
+        ],
+        "lint": "pint -v",
+        "test:lint": "pint --test -v",
+        "test:types": "phpstan analyse",
+        "test:unit": "pest --colors=always",
+        "test": [
+            "@test:lint",
+            "@test:types",
+            "@test:unit"
+        ],
+        "full": [
+            "@test:lint",
+            "@test:types",
+            "@test:unit"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Grazulex\\ThrottleSmart\\ThrottleSmartServiceProvider"
+            ],
+            "aliases": {
+                "ThrottleSmart": "Grazulex\\ThrottleSmart\\Facades\\ThrottleSmart"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "support": {
+        "issues": "https://github.com/grazulex/laravel-api-throttle-smart/issues",
+        "source": "https://github.com/grazulex/laravel-api-throttle-smart",
+        "docs": "https://github.com/grazulex/laravel-api-throttle-smart#readme"
+    }
+}

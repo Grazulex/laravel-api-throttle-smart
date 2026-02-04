@@ -1,0 +1,13 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - src
+    level: 5
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        - '#Access to an undefined property.*team_id#'
+        - '#Access to an undefined property.*tenant_id#'
+        - '#Access to an undefined property.*plan#'
+        - '#Using nullsafe property access#'

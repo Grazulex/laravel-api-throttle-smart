@@ -1,0 +1,17 @@
+/vendor/
+/node_modules/
+/.phpunit.cache/
+/.idea/
+/.vscode/
+composer.lock
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.env
+.env.local
+coverage/
+build/
+/backlog/
+*-spec.md
+CLAUDE.md
