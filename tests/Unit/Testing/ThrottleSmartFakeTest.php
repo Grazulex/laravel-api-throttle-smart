@@ -9,7 +9,7 @@ use Grazulex\ThrottleSmart\Testing\ThrottleSmartFake;
 use Illuminate\Http\Request;
 
 beforeEach(function (): void {
-    $this->fake = new ThrottleSmartFake();
+    $this->fake = new ThrottleSmartFake;
 });
 
 it('returns default limits for anonymous user', function (): void {
@@ -21,7 +21,7 @@ it('returns default limits for anonymous user', function (): void {
 });
 
 it('returns default limits for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $limits = $this->fake->getLimits($user);
@@ -31,7 +31,7 @@ it('returns default limits for user', function (): void {
 });
 
 it('returns remaining for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $remaining = $this->fake->getRemaining($user, 'minute');
@@ -40,7 +40,7 @@ it('returns remaining for user', function (): void {
 });
 
 it('returns quota info', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $quota = $this->fake->getQuota($user);
@@ -57,7 +57,7 @@ it('tracks consumed quota', function (): void {
 });
 
 it('resets limits for a key', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->fake->exhaustLimit($user, 'minute');
@@ -68,7 +68,7 @@ it('resets limits for a key', function (): void {
 });
 
 it('resets quota for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->fake->setQuotaUsed($user, 'monthly', 50000);
@@ -79,7 +79,7 @@ it('resets quota for user', function (): void {
 });
 
 it('adds quota to user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->fake->setQuotaUsed($user, 'monthly', 50000);
@@ -90,7 +90,7 @@ it('adds quota to user', function (): void {
 });
 
 it('sets temporary limit', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $until = Carbon::now()->addHour();
@@ -117,7 +117,7 @@ it('returns false for isBypassed', function (): void {
 });
 
 it('sets limit for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->fake->setLimitFor($user, 'minute', 500);
@@ -127,7 +127,7 @@ it('sets limit for user', function (): void {
 });
 
 it('exhausts limit for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->fake->exhaustLimit($user, 'minute');
@@ -138,7 +138,7 @@ it('exhausts limit for user', function (): void {
 });
 
 it('sets quota used for user', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->fake->setQuotaUsed($user, 'monthly', 75000);
@@ -148,7 +148,7 @@ it('sets quota used for user', function (): void {
 });
 
 it('asserts user is limited', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->fake->exhaustLimit($user, 'minute');
@@ -158,7 +158,7 @@ it('asserts user is limited', function (): void {
 });
 
 it('asserts user is not limited', function (): void {
-    $user = new stdClass();
+    $user = new stdClass;
     $user->id = 123;
 
     $this->fake->assertNotLimited($user);
