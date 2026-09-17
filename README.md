@@ -27,7 +27,7 @@
 ## Requirements
 
 - PHP 8.3+
-- Laravel 11.x or 12.x
+- Laravel 12.x or 13.x
 
 ---
 

@@ -6,6 +6,7 @@ namespace Grazulex\ThrottleSmart\Drivers;
 
 use Grazulex\ThrottleSmart\Contracts\StorageDriverInterface;
 use Illuminate\Cache\CacheManager;
+use Illuminate\Contracts\Cache\Repository;
 
 class CacheDriver implements StorageDriverInterface
 {
@@ -137,7 +138,7 @@ class CacheDriver implements StorageDriverInterface
         return 0;
     }
 
-    protected function getCache(): \Illuminate\Contracts\Cache\Repository
+    protected function getCache(): Repository
     {
         return $this->store === 'default'
             ? $this->cache->store()

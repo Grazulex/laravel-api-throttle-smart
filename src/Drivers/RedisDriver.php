@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Grazulex\ThrottleSmart\Drivers;
 
 use Grazulex\ThrottleSmart\Contracts\StorageDriverInterface;
+use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\RedisManager;
 
 class RedisDriver implements StorageDriverInterface
@@ -224,7 +225,7 @@ class RedisDriver implements StorageDriverInterface
         return 0;
     }
 
-    protected function getConnection(): \Illuminate\Redis\Connections\Connection
+    protected function getConnection(): Connection
     {
         return $this->redis->connection($this->connection);
     }
