@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0](https://github.com/Grazulex/laravel-api-throttle-smart/releases/tag/v0.2.0) (2026-09-17)
+
+### Added
+
+- Laravel 13 support (`illuminate/*` `^12.0|^13.0`)
+
+### Changed
+
+- PHP 8.3 remains the minimum supported version; CI now also runs on PHP 8.4
+- Development dependencies updated: Orchestra Testbench `^10.0|^11.0`, Pest `^3.8|^4.0`, Pest Laravel plugin `^3.2|^4.0`, Larastan `^3.4`, PHPStan `^2.1`
+- CI test matrix now covers PHP 8.3/8.4, Laravel 12/13 and prefer-lowest/prefer-stable dependency sets; dedicated code-style and static-analysis workflows added
+
+### Removed
+
+- Laravel 11 support (end of life)
+
+### Fixed
+
+- Code style adjustments in `CacheDriver` and `RedisDriver` (fully qualified return types replaced by imports) to satisfy the current Laravel Pint preset
+
 ## [0.1.0](https://github.com/Grazulex/laravel-api-throttle-smart/releases/tag/v0.1.0) (2026-02-04)
 
 ### Features
