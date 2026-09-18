@@ -2,6 +2,12 @@
 
 > Intelligent, plan-aware rate limiting for Laravel APIs - Multi-algorithm, multi-tenant, quota management
 
+> [!TIP]
+> **What Laravel API Throttle Smart does for you** — Give your Free, Pro and Enterprise customers different API limits and quotas without writing custom rate limiting for each plan. One config, standard headers, and your API stays fair and predictable under load.
+>
+> **This package is free and maintained on my own time.** If it saves you hours, a small contribution helps me keep it going:
+> [💖 GitHub Sponsors](https://github.com/sponsors/Grazulex) · [☕ Buy Me a Coffee](https://buymeacoffee.com/grazulex) · [PayPal](https://paypal.me/strauven)
+
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/grazulex/laravel-api-throttle-smart.svg?style=flat-square)](https://packagist.org/packages/grazulex/laravel-api-throttle-smart)
 [![Tests](https://img.shields.io/github/actions/workflow/status/grazulex/laravel-api-throttle-smart/tests.yml?label=tests)](https://github.com/grazulex/laravel-api-throttle-smart/actions)
 [![Total Downloads](https://img.shields.io/packagist/dt/grazulex/laravel-api-throttle-smart.svg?style=flat-square)](https://packagist.org/packages/grazulex/laravel-api-throttle-smart)
@@ -344,6 +350,14 @@ If you discover any security-related issues, please email security@grazulex.dev 
 
 - [Jean-Marc Strauven](https://github.com/Grazulex)
 - [All Contributors](../../contributors)
+
+## Support This Package
+
+Laravel API Throttle Smart is free, open source and maintained on my own time. If it saves you hours, here is how you can give back:
+
+- ⭐ **Star the repository** — it helps other developers find it
+- 🐦 **Share it** with your team and network
+- 💖 **[Sponsor on GitHub](https://github.com/sponsors/Grazulex)**, **[buy me a coffee](https://buymeacoffee.com/grazulex)** or **[donate via PayPal](https://paypal.me/strauven)** — every contribution funds maintenance, new features and Laravel upgrades
 
 ## License
 
