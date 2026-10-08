@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0](https://github.com/Grazulex/laravel-api-throttle-smart/releases/tag/v0.3.0) (2026-10-08)
+
+### Changed
+
+- **Minimum PHP version is now 8.4**: PHP 8.3 is no longer supported (#6)
+- CI test matrix now runs PHP 8.4 and 8.5 (#6)
+
 ## [0.2.0](https://github.com/Grazulex/laravel-api-throttle-smart/releases/tag/v0.2.0) (2026-09-17)
 
 ### Added
