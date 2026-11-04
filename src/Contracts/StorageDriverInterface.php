@@ -63,7 +63,7 @@ interface StorageDriverInterface
     /**
      * Get analytics data.
      *
-     * @return array<string, mixed>
+     * @return array<array-key, mixed>
      */
     public function getAnalytics(string $period = 'day', int $limit = 30): array;
 
