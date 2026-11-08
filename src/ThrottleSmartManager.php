@@ -11,7 +11,9 @@ use Grazulex\ThrottleSmart\Support\Plan;
 use Grazulex\ThrottleSmart\Support\QuotaInfo;
 use Grazulex\ThrottleSmart\Support\RateLimits;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
 use Illuminate\Support\Str;
+use Throwable;
 
 class ThrottleSmartManager
 {
@@ -196,6 +198,52 @@ class ThrottleSmartManager
         }
 
         return false;
+    }
+
+    /**
+     * Record analytics for a request outcome, honoring the "analytics" configuration.
+     *
+     * The outcome is one of "allowed", "rate_limited" or "quota_exceeded".
+     * Storage failures are reported and never interrupt the request.
+     */
+    public function recordAnalytics(Request $request, string $plan, string $outcome = 'allowed'): void
+    {
+        if (! $this->shouldTrackAnalytics($outcome)) {
+            return;
+        }
+
+        try {
+            $this->driver->recordAnalytics(
+                $this->resolveBaseKey($request->user()),
+                $plan,
+                $this->resolveAnalyticsEndpoint($request),
+                $outcome !== 'allowed',
+            );
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * Determine whether analytics should be recorded for an outcome.
+     */
+    public function shouldTrackAnalytics(string $outcome = 'allowed'): bool
+    {
+        $analytics = $this->config['analytics'] ?? [];
+
+        if (! is_array($analytics) || ! (bool) ($analytics['enabled'] ?? false)) {
+            return false;
+        }
+
+        $option = match ($outcome) {
+            'rate_limited' => 'limited',
+            'quota_exceeded' => 'quota_usage',
+            default => 'requests',
+        };
+
+        $track = is_array($analytics['track'] ?? null) ? $analytics['track'] : [];
+
+        return (bool) ($track[$option] ?? true);
     }
 
     /**
@@ -460,6 +508,17 @@ class ThrottleSmartManager
         $endpoint = md5($override['pattern']);
 
         return "{$prefix}{$baseKey}:endpoint:{$endpoint}:{$window}";
+    }
+
+    /**
+     * Resolve the endpoint label used for analytics ("METHOD /route/uri").
+     */
+    protected function resolveAnalyticsEndpoint(Request $request): string
+    {
+        $route = $request->route();
+        $uri = $route instanceof Route ? $route->uri() : $request->path();
+
+        return strtoupper($request->method()).' /'.ltrim($uri, '/');
     }
 
     /**

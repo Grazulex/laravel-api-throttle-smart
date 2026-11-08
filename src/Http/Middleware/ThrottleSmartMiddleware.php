@@ -43,14 +43,21 @@ class ThrottleSmartMiddleware
 
         // Check if rate limited
         if ($limits->isLimited) {
+            $this->manager->recordAnalytics($request, $limits->plan, 'rate_limited');
+
             return $this->buildRateLimitedResponse($request, $limits);
         }
 
         // Check quota
         $quota = $this->manager->getQuota($request->user());
         if ($quota->isExceeded) {
+            $this->manager->recordAnalytics($request, $limits->plan, 'quota_exceeded');
+
             return $this->buildQuotaExceededResponse($request, $quota);
         }
+
+        // Record the allowed request
+        $this->manager->recordAnalytics($request, $limits->plan, 'allowed');
 
         // Check for approaching limits (fire events)
         $this->checkThresholds($request, $limits, $quota);

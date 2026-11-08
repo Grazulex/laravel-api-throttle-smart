@@ -24,6 +24,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static void setTemporaryLimit(mixed $user, string $type, int $limit, Carbon $until)
  * @method static bool wouldLimit(Request $request)
  * @method static bool isBypassed(Request $request)
+ * @method static void recordAnalytics(Request $request, string $plan, string $outcome = 'allowed')
+ * @method static bool shouldTrackAnalytics(string $outcome = 'allowed')
  * @method static self resolvePlanUsing(Closure $callback)
  * @method static self resolveKeyUsing(Closure $callback)
  * @method static self forUser(mixed $user)

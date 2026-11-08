@@ -258,15 +258,18 @@ return [
     |--------------------------------------------------------------------------
     | Analytics & Logging
     |--------------------------------------------------------------------------
+    | When enabled, the middleware records each throttled request through the
+    | active storage driver (the database and redis drivers persist it, the
+    | cache driver ignores it).
     */
     'analytics' => [
         'enabled' => env('THROTTLE_SMART_ANALYTICS', false),
         'driver' => 'database',
         'track' => [
-            'requests' => true,
-            'limited' => true,
-            'quota_usage' => true,
-            'bandwidth' => false,
+            'requests' => true,     // Requests that were allowed
+            'limited' => true,      // Requests rejected by a rate limit
+            'quota_usage' => true,  // Requests rejected because the quota is exceeded
+            'bandwidth' => false,   // Not recorded by the built-in drivers yet
         ],
         'retention' => 90,
         'aggregation' => 'hourly',
