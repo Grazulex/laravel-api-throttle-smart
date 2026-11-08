@@ -11,6 +11,7 @@ use Grazulex\ThrottleSmart\Support\Plan;
 use Grazulex\ThrottleSmart\Support\QuotaInfo;
 use Grazulex\ThrottleSmart\Support\RateLimits;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class ThrottleSmartManager
 {
@@ -36,15 +37,17 @@ class ThrottleSmartManager
         $user = $user ?? $this->currentUser;
         $plan = $this->resolvePlan($user);
         $planConfig = $this->getPlanConfig($plan);
+        $request = $this->currentRequest();
+        $override = $this->resolveEndpointOverride($request);
 
         $limits = [];
         $isLimited = false;
         $limitedBy = null;
 
         foreach (['second', 'minute', 'hour', 'day'] as $window) {
-            $limit = $planConfig->getLimit($window);
-            if ($limit !== null) {
-                $key = $this->buildKey($user, $window);
+            $resolved = $this->resolveWindowLimit($user, $window, $planConfig, $override, $request);
+            if ($resolved !== null) {
+                ['limit' => $limit, 'key' => $key] = $resolved;
                 $windowSeconds = $this->getWindowSeconds($window);
                 $result = $this->driver->increment($key, $windowSeconds);
 
@@ -178,11 +181,12 @@ class ThrottleSmartManager
         $user = $request->user();
         $plan = $this->resolvePlan($user);
         $planConfig = $this->getPlanConfig($plan);
+        $override = $this->resolveEndpointOverride($request);
 
         foreach (['second', 'minute', 'hour', 'day'] as $window) {
-            $limit = $planConfig->getLimit($window);
-            if ($limit !== null) {
-                $key = $this->buildKey($user, $window);
+            $resolved = $this->resolveWindowLimit($user, $window, $planConfig, $override, $request);
+            if ($resolved !== null) {
+                ['limit' => $limit, 'key' => $key] = $resolved;
                 $count = $this->driver->get($key) ?? 0;
 
                 if ($count >= $limit) {
@@ -302,17 +306,160 @@ class ThrottleSmartManager
      */
     protected function buildKey(mixed $user, string $window): string
     {
-        if ($this->keyResolver) {
-            $baseKey = ($this->keyResolver)(request());
-        } elseif ($user) {
-            $baseKey = "user:{$user->id}";
-        } else {
-            $baseKey = 'ip:'.request()->ip();
-        }
-
-        $prefix = $this->config['drivers'][$this->config['driver'] ?? 'cache']['prefix'] ?? 'throttle:';
+        $baseKey = $this->resolveBaseKey($user);
+        $prefix = $this->getKeyPrefix();
 
         return "{$prefix}{$baseKey}:{$window}";
+    }
+
+    /**
+     * Resolve the base key (scope) used for plan-level counters.
+     */
+    protected function resolveBaseKey(mixed $user): string
+    {
+        if ($this->keyResolver) {
+            return (string) ($this->keyResolver)(request());
+        }
+
+        if ($user) {
+            return "user:{$user->id}";
+        }
+
+        return 'ip:'.request()->ip();
+    }
+
+    /**
+     * Get the storage key prefix.
+     */
+    protected function getKeyPrefix(): string
+    {
+        return $this->config['drivers'][$this->config['driver'] ?? 'cache']['prefix'] ?? 'throttle:';
+    }
+
+    /**
+     * Get the current HTTP request, if any.
+     */
+    protected function currentRequest(): ?Request
+    {
+        if (! app()->bound('request')) {
+            return null;
+        }
+
+        return request();
+    }
+
+    /**
+     * Resolve the limit and counter key for a window, applying any endpoint override.
+     *
+     * @param  array{pattern: string, config: array<string, mixed>}|null  $override
+     * @return array{limit: int, key: string}|null
+     */
+    protected function resolveWindowLimit(mixed $user, string $window, Plan $planConfig, ?array $override, ?Request $request): ?array
+    {
+        if ($override !== null) {
+            $endpointLimit = $this->getEndpointLimit($override['config'], $window);
+
+            if ($endpointLimit !== null) {
+                return [
+                    'limit' => $endpointLimit,
+                    'key' => $this->buildEndpointKey($user, $window, $override, $request),
+                ];
+            }
+        }
+
+        $limit = $planConfig->getLimit($window);
+
+        if ($limit === null) {
+            return null;
+        }
+
+        return ['limit' => $limit, 'key' => $this->buildKey($user, $window)];
+    }
+
+    /**
+     * Find the first endpoint override (config "endpoints") matching the request.
+     *
+     * @return array{pattern: string, config: array<string, mixed>}|null
+     */
+    protected function resolveEndpointOverride(?Request $request): ?array
+    {
+        $endpoints = $this->config['endpoints'] ?? [];
+
+        if (! $request instanceof Request || ! is_array($endpoints) || $endpoints === []) {
+            return null;
+        }
+
+        $method = strtoupper($request->method());
+        $path = trim($request->path(), '/');
+
+        foreach ($endpoints as $pattern => $override) {
+            if (! is_string($pattern) || ! is_array($override)) {
+                continue;
+            }
+
+            if ($this->endpointMatches($pattern, $method, $path)) {
+                return ['pattern' => $pattern, 'config' => $override];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Check whether an endpoint pattern ("METHOD /path/*" or "/path/*") matches.
+     */
+    protected function endpointMatches(string $pattern, string $method, string $path): bool
+    {
+        $pattern = trim($pattern);
+
+        if (preg_match('/^(\S+)\s+(\S+)$/', $pattern, $matches) === 1) {
+            $methodPattern = $matches[1];
+            $pathPattern = $matches[2];
+        } else {
+            $methodPattern = '*';
+            $pathPattern = $pattern;
+        }
+
+        $methods = array_map(strtoupper(...), explode('|', $methodPattern));
+        if (! Str::is($methods, $method)) {
+            return false;
+        }
+
+        return Str::is(trim($pathPattern, '/'), $path);
+    }
+
+    /**
+     * Get an endpoint override limit for a window, or null when not overridden.
+     *
+     * @param  array<string, mixed>  $override
+     */
+    protected function getEndpointLimit(array $override, string $window): ?int
+    {
+        $value = $override["requests_per_{$window}"] ?? null;
+
+        return is_numeric($value) ? (int) $value : null;
+    }
+
+    /**
+     * Build the rate limit key for an endpoint override counter.
+     *
+     * @param  array{pattern: string, config: array<string, mixed>}  $override
+     */
+    protected function buildEndpointKey(mixed $user, string $window, array $override, ?Request $request): string
+    {
+        $scope = $override['config']['scope'] ?? null;
+        $ip = 'ip:'.($request?->ip() ?? request()->ip());
+
+        $baseKey = match ($scope) {
+            'ip' => $ip,
+            'user' => $user ? "user:{$user->id}" : $ip,
+            default => $this->resolveBaseKey($user),
+        };
+
+        $prefix = $this->getKeyPrefix();
+        $endpoint = md5($override['pattern']);
+
+        return "{$prefix}{$baseKey}:endpoint:{$endpoint}:{$window}";
     }
 
     /**
