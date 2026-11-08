@@ -118,6 +118,16 @@ class ThrottleSmartFake
         return false;
     }
 
+    public function recordAnalytics(Request $request, string $plan, string $outcome = 'allowed'): void
+    {
+        // Analytics are not recorded by the fake
+    }
+
+    public function shouldTrackAnalytics(string $outcome = 'allowed'): bool
+    {
+        return false;
+    }
+
     // Test helper methods
 
     /**
