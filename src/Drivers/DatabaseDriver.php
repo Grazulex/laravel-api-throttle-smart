@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Grazulex\ThrottleSmart\Drivers;
 
+use Grazulex\ThrottleSmart\Contracts\ConcurrencyStoreInterface;
 use Grazulex\ThrottleSmart\Contracts\StorageDriverInterface;
 use Illuminate\Database\DatabaseManager;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
-class DatabaseDriver implements StorageDriverInterface
+class DatabaseDriver implements ConcurrencyStoreInterface, StorageDriverInterface
 {
     protected string $table;
 
@@ -254,6 +257,55 @@ class DatabaseDriver implements StorageDriverInterface
             ->toArray();
     }
 
+    public function acquireConcurrencySlot(string $key, int $limit, int $ttl): ?string
+    {
+        $token = Str::random(32);
+        $now = now()->getTimestamp();
+        $slotPrefix = $this->concurrencySlotPrefix($key);
+
+        // Drop slots left behind by requests that never released them
+        $this->concurrencySlots($slotPrefix)
+            ->where('reset_at', '<=', $now)
+            ->delete();
+
+        DB::connection($this->connection)
+            ->table($this->table)
+            ->insert([
+                'key' => $slotPrefix.$token,
+                'count' => 1,
+                'reset_at' => $now + max(1, $ttl),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+        $active = $this->concurrencySlots($slotPrefix)
+            ->where('reset_at', '>', $now)
+            ->count();
+
+        if ($active > $limit) {
+            $this->releaseConcurrencySlot($key, $token);
+
+            return null;
+        }
+
+        return $token;
+    }
+
+    public function releaseConcurrencySlot(string $key, string $token): void
+    {
+        DB::connection($this->connection)
+            ->table($this->table)
+            ->where('key', $this->concurrencySlotPrefix($key).$token)
+            ->delete();
+    }
+
+    public function getConcurrentCount(string $key): int
+    {
+        return $this->concurrencySlots($this->concurrencySlotPrefix($key))
+            ->where('reset_at', '>', now()->getTimestamp())
+            ->count();
+    }
+
     public function cleanup(int $olderThanDays = 90): int
     {
         $cutoff = now()->subDays($olderThanDays)->toDateTimeString();
@@ -269,5 +321,27 @@ class DatabaseDriver implements StorageDriverInterface
             ->delete();
 
         return $deletedRateLimits + $deletedAnalytics;
+    }
+
+    /**
+     * Build the row key prefix shared by all concurrency slots of a key.
+     */
+    protected function concurrencySlotPrefix(string $key): string
+    {
+        return 'concurrent:'.$key.':';
+    }
+
+    /**
+     * Query the concurrency slot rows whose key starts with the given prefix.
+     */
+    protected function concurrencySlots(string $slotPrefix): Builder
+    {
+        $query = DB::connection($this->connection)->table($this->table);
+        $pattern = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $slotPrefix).'%';
+
+        return $query->whereRaw(
+            $query->getGrammar()->wrap('key')." like ? escape '!'",
+            [$pattern]
+        );
     }
 }

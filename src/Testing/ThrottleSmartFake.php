@@ -128,6 +128,29 @@ class ThrottleSmartFake
         return false;
     }
 
+    /**
+     * @return array{allowed: bool, limit: int|null, key: string|null, token: string|null}
+     */
+    public function acquireConcurrencySlot(mixed $user = null): array
+    {
+        return ['allowed' => true, 'limit' => null, 'key' => null, 'token' => null];
+    }
+
+    public function releaseConcurrencySlot(string $key, string $token): void
+    {
+        // Concurrency slots are not tracked by the fake
+    }
+
+    public function getConcurrentRequests(mixed $user = null): int
+    {
+        return 0;
+    }
+
+    public function getConcurrencyTtl(): int
+    {
+        return 60;
+    }
+
     // Test helper methods
 
     /**

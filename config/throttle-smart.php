@@ -181,6 +181,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Concurrent Requests
+    |--------------------------------------------------------------------------
+    | The middleware enforces each plan's "concurrent_requests" limit by
+    | reserving a slot before the request runs and releasing it once the
+    | response is sent. "ttl" (seconds) is a safety net: a slot that is never
+    | released (crashed or killed worker) expires after this delay. Keep it
+    | above your longest request duration.
+    */
+    'concurrency' => [
+        'ttl' => env('THROTTLE_SMART_CONCURRENCY_TTL', 60),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Response Configuration
     |--------------------------------------------------------------------------
     */

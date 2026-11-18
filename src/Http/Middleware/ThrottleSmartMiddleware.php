@@ -14,9 +14,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Throwable;
 
 class ThrottleSmartMiddleware
 {
+    /**
+     * Request attribute holding the concurrency slot reserved for the request.
+     */
+    public const string CONCURRENCY_ATTRIBUTE = 'throttle-smart.concurrency';
+
     public function __construct(
         protected ThrottleSmartManager $manager,
     ) {}
@@ -56,6 +62,24 @@ class ThrottleSmartMiddleware
             return $this->buildQuotaExceededResponse($request, $quota);
         }
 
+        // Reserve a concurrency slot (released in terminate())
+        if (! $request->attributes->has(self::CONCURRENCY_ATTRIBUTE)) {
+            $concurrency = $this->manager->acquireConcurrencySlot($request->user());
+
+            if (! $concurrency['allowed']) {
+                $this->manager->recordAnalytics($request, $limits->plan, 'rate_limited');
+
+                return $this->buildConcurrencyLimitedResponse($request, $limits, (int) $concurrency['limit']);
+            }
+
+            if ($concurrency['key'] !== null && $concurrency['token'] !== null) {
+                $request->attributes->set(self::CONCURRENCY_ATTRIBUTE, [
+                    'key' => $concurrency['key'],
+                    'token' => $concurrency['token'],
+                ]);
+            }
+        }
+
         // Record the allowed request
         $this->manager->recordAnalytics($request, $limits->plan, 'allowed');
 
@@ -63,10 +87,77 @@ class ThrottleSmartMiddleware
         $this->checkThresholds($request, $limits, $quota);
 
         // Process the request
-        $response = $next($request);
+        try {
+            $response = $next($request);
+        } catch (Throwable $e) {
+            $this->releaseConcurrencySlot($request);
+
+            throw $e;
+        }
 
         // Add rate limit headers
         return $this->addHeaders($response, $limits, $quota);
+    }
+
+    /**
+     * Release the concurrency slot once the response has been sent.
+     */
+    public function terminate(Request $request, SymfonyResponse $response): void
+    {
+        $this->releaseConcurrencySlot($request);
+    }
+
+    /**
+     * Release the concurrency slot held by the request, if any.
+     */
+    protected function releaseConcurrencySlot(Request $request): void
+    {
+        $slot = $request->attributes->get(self::CONCURRENCY_ATTRIBUTE);
+        $request->attributes->remove(self::CONCURRENCY_ATTRIBUTE);
+
+        if (is_array($slot) && is_string($slot['key'] ?? null) && is_string($slot['token'] ?? null)) {
+            $this->manager->releaseConcurrencySlot($slot['key'], $slot['token']);
+        }
+    }
+
+    /**
+     * Build the response returned when the concurrent requests limit is reached.
+     */
+    protected function buildConcurrencyLimitedResponse(Request $request, mixed $limits, int $limit): JsonResponse
+    {
+        $retryAfter = 1;
+
+        event(new RateLimitExceeded(
+            key: $this->getKeyForRequest($request),
+            plan: $limits->plan,
+            limitType: 'concurrent',
+            limit: $limit,
+            attempted: $limit + 1,
+            user: $request->user(),
+            request: $request,
+            retryAfter: $retryAfter,
+        ));
+
+        $response = [
+            'success' => false,
+            'error' => [
+                'code' => 'CONCURRENT_LIMIT_EXCEEDED',
+                'message' => "Too many concurrent requests. Please retry after {$retryAfter} second.",
+                'type' => 'rate_limit',
+                'limit_type' => 'concurrent',
+                'limit' => $limit,
+                'retry_after' => $retryAfter,
+            ],
+        ];
+
+        if (config('throttle-smart.response.detailed_errors', false)) {
+            $response['error']['plan'] = $limits->plan;
+            $response['error']['upgrade_url'] = config('app.url').'/pricing';
+        }
+
+        return response()->json($response, 429, [
+            'Retry-After' => $retryAfter,
+        ]);
     }
 
     /**

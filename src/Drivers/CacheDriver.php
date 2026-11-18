@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Grazulex\ThrottleSmart\Drivers;
 
+use Closure;
+use Grazulex\ThrottleSmart\Contracts\ConcurrencyStoreInterface;
 use Grazulex\ThrottleSmart\Contracts\StorageDriverInterface;
 use Illuminate\Cache\CacheManager;
+use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Support\Str;
 
-class CacheDriver implements StorageDriverInterface
+class CacheDriver implements ConcurrencyStoreInterface, StorageDriverInterface
 {
     protected string $prefix;
 
@@ -136,6 +141,104 @@ class CacheDriver implements StorageDriverInterface
     {
         // Cache handles its own expiration
         return 0;
+    }
+
+    public function acquireConcurrencySlot(string $key, int $limit, int $ttl): ?string
+    {
+        $fullKey = $this->prefix.'concurrent:'.$key;
+        $token = Str::random(32);
+        $ttl = max(1, $ttl);
+
+        return $this->withConcurrencyLock($fullKey, function () use ($fullKey, $limit, $ttl, $token): ?string {
+            $cache = $this->getCache();
+            $now = now()->getTimestamp();
+            $slots = $this->activeSlots($cache->get($fullKey), $now);
+
+            if (count($slots) >= $limit) {
+                return null;
+            }
+
+            $slots[$token] = $now + $ttl;
+            $cache->put($fullKey, $slots, $ttl);
+
+            return $token;
+        });
+    }
+
+    public function releaseConcurrencySlot(string $key, string $token): void
+    {
+        $fullKey = $this->prefix.'concurrent:'.$key;
+
+        $this->withConcurrencyLock($fullKey, function () use ($fullKey, $token): null {
+            $cache = $this->getCache();
+            $now = now()->getTimestamp();
+            $slots = $this->activeSlots($cache->get($fullKey), $now);
+            unset($slots[$token]);
+
+            if ($slots === []) {
+                $cache->forget($fullKey);
+
+                return null;
+            }
+
+            $cache->put($fullKey, $slots, max(1, max($slots) - $now));
+
+            return null;
+        });
+    }
+
+    public function getConcurrentCount(string $key): int
+    {
+        $slots = $this->getCache()->get($this->prefix.'concurrent:'.$key);
+
+        return count($this->activeSlots($slots, now()->getTimestamp()));
+    }
+
+    /**
+     * Keep only the slots that have not expired yet.
+     *
+     * @return array<string, int>
+     */
+    protected function activeSlots(mixed $slots, int $now): array
+    {
+        if (! is_array($slots)) {
+            return [];
+        }
+
+        $active = [];
+        foreach ($slots as $token => $expiresAt) {
+            if (is_numeric($expiresAt) && (int) $expiresAt > $now) {
+                $active[(string) $token] = (int) $expiresAt;
+            }
+        }
+
+        return $active;
+    }
+
+    /**
+     * Run a callback under a cache lock when the store supports locks.
+     *
+     * @template TResult
+     *
+     * @param  Closure(): TResult  $callback
+     * @return TResult
+     */
+    protected function withConcurrencyLock(string $fullKey, Closure $callback): mixed
+    {
+        $store = $this->getCache()->getStore();
+
+        if (! $store instanceof LockProvider) {
+            return $callback();
+        }
+
+        try {
+            /** @var TResult $result */
+            $result = $store->lock($fullKey.':lock', 5)->block(3, $callback);
+
+            return $result;
+        } catch (LockTimeoutException) {
+            return $callback();
+        }
     }
 
     protected function getCache(): Repository

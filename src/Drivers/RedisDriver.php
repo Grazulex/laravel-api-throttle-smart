@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Grazulex\ThrottleSmart\Drivers;
 
+use Grazulex\ThrottleSmart\Contracts\ConcurrencyStoreInterface;
 use Grazulex\ThrottleSmart\Contracts\StorageDriverInterface;
 use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\RedisManager;
+use Illuminate\Support\Str;
 
-class RedisDriver implements StorageDriverInterface
+class RedisDriver implements ConcurrencyStoreInterface, StorageDriverInterface
 {
     protected string $prefix;
 
@@ -223,6 +225,65 @@ class RedisDriver implements StorageDriverInterface
     {
         // Redis handles expiration automatically
         return 0;
+    }
+
+    public function acquireConcurrencySlot(string $key, int $limit, int $ttl): ?string
+    {
+        $fullKey = $this->prefix.'concurrent:'.$key;
+        $connection = $this->getConnection();
+        $token = Str::random(32);
+        $ttl = max(1, $ttl);
+        $now = now()->getTimestamp();
+
+        if ($this->useLua) {
+            // Each slot is a sorted set member scored by its expiry time
+            $script = <<<'LUA'
+                local key = KEYS[1]
+                local limit = tonumber(ARGV[1])
+                local ttl = tonumber(ARGV[2])
+                local now = tonumber(ARGV[3])
+
+                redis.call('zremrangebyscore', key, '-inf', now)
+                if redis.call('zcard', key) >= limit then
+                    return 0
+                end
+
+                redis.call('zadd', key, now + ttl, ARGV[4])
+                redis.call('expire', key, ttl)
+                return 1
+            LUA;
+
+            $acquired = (int) $connection->eval($script, [$fullKey, $limit, $ttl, $now, $token], 1);
+
+            return $acquired === 1 ? $token : null;
+        }
+
+        // Non-Lua fallback: add first, then roll back when over the limit
+        $connection->zremrangebyscore($fullKey, '-inf', (string) $now);
+        $connection->zadd($fullKey, $now + $ttl, $token);
+        $connection->expire($fullKey, $ttl);
+
+        if ((int) $connection->zcard($fullKey) > $limit) {
+            $connection->zrem($fullKey, $token);
+
+            return null;
+        }
+
+        return $token;
+    }
+
+    public function releaseConcurrencySlot(string $key, string $token): void
+    {
+        $this->getConnection()->zrem($this->prefix.'concurrent:'.$key, $token);
+    }
+
+    public function getConcurrentCount(string $key): int
+    {
+        return (int) $this->getConnection()->zcount(
+            $this->prefix.'concurrent:'.$key,
+            '('.now()->getTimestamp(),
+            '+inf',
+        );
     }
 
     protected function getConnection(): Connection
