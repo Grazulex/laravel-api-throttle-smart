@@ -6,6 +6,7 @@ namespace Grazulex\ThrottleSmart;
 
 use Carbon\Carbon;
 use Closure;
+use Grazulex\ThrottleSmart\Contracts\ConcurrencyStoreInterface;
 use Grazulex\ThrottleSmart\Contracts\StorageDriverInterface;
 use Grazulex\ThrottleSmart\Support\Plan;
 use Grazulex\ThrottleSmart\Support\QuotaInfo;
@@ -222,6 +223,83 @@ class ThrottleSmartManager
         } catch (Throwable $e) {
             report($e);
         }
+    }
+
+    /**
+     * Try to reserve a concurrency slot for the plan "concurrent_requests" limit.
+     *
+     * "allowed" is false when the limit is reached. "token" is null when no slot
+     * was reserved: the plan has no limit, the driver cannot track concurrency,
+     * or the storage failed (failures are reported and the request is allowed).
+     * Release a reserved slot with releaseConcurrencySlot() once the request ends.
+     *
+     * @return array{allowed: bool, limit: int|null, key: string|null, token: string|null}
+     */
+    public function acquireConcurrencySlot(mixed $user = null): array
+    {
+        $user = $user ?? $this->currentUser;
+        $limit = $this->getPlanConfig($this->resolvePlan($user))->concurrentRequests;
+
+        if ($limit === null || $limit < 1 || ! $this->driver instanceof ConcurrencyStoreInterface) {
+            return ['allowed' => true, 'limit' => $limit, 'key' => null, 'token' => null];
+        }
+
+        $key = $this->buildKey($user, 'concurrent');
+
+        try {
+            $token = $this->driver->acquireConcurrencySlot($key, $limit, $this->getConcurrencyTtl());
+        } catch (Throwable $e) {
+            report($e);
+
+            return ['allowed' => true, 'limit' => $limit, 'key' => null, 'token' => null];
+        }
+
+        if ($token === null) {
+            return ['allowed' => false, 'limit' => $limit, 'key' => $key, 'token' => null];
+        }
+
+        return ['allowed' => true, 'limit' => $limit, 'key' => $key, 'token' => $token];
+    }
+
+    /**
+     * Release a concurrency slot reserved by acquireConcurrencySlot().
+     *
+     * Storage failures are reported; the slot then expires after its TTL.
+     */
+    public function releaseConcurrencySlot(string $key, string $token): void
+    {
+        if (! $this->driver instanceof ConcurrencyStoreInterface) {
+            return;
+        }
+
+        try {
+            $this->driver->releaseConcurrencySlot($key, $token);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * Get the number of in-flight requests for a user (0 when not tracked).
+     */
+    public function getConcurrentRequests(mixed $user = null): int
+    {
+        if (! $this->driver instanceof ConcurrencyStoreInterface) {
+            return 0;
+        }
+
+        return $this->driver->getConcurrentCount($this->buildKey($user ?? $this->currentUser, 'concurrent'));
+    }
+
+    /**
+     * Get the safety TTL (seconds) after which an unreleased slot expires.
+     */
+    public function getConcurrencyTtl(): int
+    {
+        $concurrency = $this->config['concurrency'] ?? [];
+        $ttl = is_array($concurrency) ? ($concurrency['ttl'] ?? 60) : 60;
+
+        return is_numeric($ttl) ? max(1, (int) $ttl) : 60;
     }
 
     /**
