@@ -151,6 +151,26 @@ class ThrottleSmartFake
         return 60;
     }
 
+    /**
+     * @return array{limit: int|null, used: int, remaining: int|null, exceeded: bool, key: string|null, resets_at: Carbon}
+     */
+    public function getBandwidth(mixed $user = null): array
+    {
+        return [
+            'limit' => null,
+            'used' => 0,
+            'remaining' => null,
+            'exceeded' => false,
+            'key' => null,
+            'resets_at' => Carbon::now()->addDay()->startOfDay(),
+        ];
+    }
+
+    public function consumeBandwidth(string $key, int $bytes): void
+    {
+        // Bandwidth is not tracked by the fake
+    }
+
     // Test helper methods
 
     /**

@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace Grazulex\ThrottleSmart\Http\Middleware;
 
+use Carbon\Carbon;
 use Closure;
 use Grazulex\ThrottleSmart\Events\QuotaExceeded;
 use Grazulex\ThrottleSmart\Events\QuotaThresholdReached;
 use Grazulex\ThrottleSmart\Events\RateLimitApproaching;
 use Grazulex\ThrottleSmart\Events\RateLimitExceeded;
 use Grazulex\ThrottleSmart\ThrottleSmartManager;
+use Illuminate\Foundation\Auth\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Throwable;
 
@@ -22,6 +25,11 @@ class ThrottleSmartMiddleware
      * Request attribute holding the concurrency slot reserved for the request.
      */
     public const string CONCURRENCY_ATTRIBUTE = 'throttle-smart.concurrency';
+
+    /**
+     * Request attribute holding the daily bandwidth counter key of the request.
+     */
+    public const string BANDWIDTH_ATTRIBUTE = 'throttle-smart.bandwidth';
 
     public function __construct(
         protected ThrottleSmartManager $manager,
@@ -62,6 +70,14 @@ class ThrottleSmartMiddleware
             return $this->buildQuotaExceededResponse($request, $quota);
         }
 
+        // Check the daily bandwidth quota (the response size is counted in terminate())
+        $bandwidth = $this->manager->getBandwidth($request->user());
+        if ($bandwidth['exceeded']) {
+            $this->manager->recordAnalytics($request, $limits->plan, 'quota_exceeded');
+
+            return $this->buildBandwidthExceededResponse($request, $bandwidth);
+        }
+
         // Reserve a concurrency slot (released in terminate())
         if (! $request->attributes->has(self::CONCURRENCY_ATTRIBUTE)) {
             $concurrency = $this->manager->acquireConcurrencySlot($request->user());
@@ -78,6 +94,11 @@ class ThrottleSmartMiddleware
                     'token' => $concurrency['token'],
                 ]);
             }
+        }
+
+        // Remember the bandwidth counter so that terminate() adds the response size once
+        if ($bandwidth['key'] !== null && ! $request->attributes->has(self::BANDWIDTH_ATTRIBUTE)) {
+            $request->attributes->set(self::BANDWIDTH_ATTRIBUTE, $bandwidth['key']);
         }
 
         // Record the allowed request
@@ -100,11 +121,51 @@ class ThrottleSmartMiddleware
     }
 
     /**
-     * Release the concurrency slot once the response has been sent.
+     * Release the concurrency slot and count the response size against the
+     * daily bandwidth quota once the response has been sent.
      */
     public function terminate(Request $request, SymfonyResponse $response): void
     {
         $this->releaseConcurrencySlot($request);
+        $this->recordBandwidth($request, $response);
+    }
+
+    /**
+     * Add the response size to the daily bandwidth counter of the request, if any.
+     */
+    protected function recordBandwidth(Request $request, SymfonyResponse $response): void
+    {
+        $key = $request->attributes->get(self::BANDWIDTH_ATTRIBUTE);
+        $request->attributes->remove(self::BANDWIDTH_ATTRIBUTE);
+
+        if (is_string($key) && $key !== '') {
+            $this->manager->consumeBandwidth($key, $this->measureResponseSize($response));
+        }
+    }
+
+    /**
+     * Get the size of the response body in bytes.
+     *
+     * The Content-Length header is used when present. Otherwise the size of the
+     * file (file responses) or of the content is used. Streamed responses
+     * without a Content-Length header count as 0.
+     */
+    protected function measureResponseSize(SymfonyResponse $response): int
+    {
+        $length = $response->headers->get('Content-Length');
+        if (is_numeric($length)) {
+            return max(0, (int) $length);
+        }
+
+        if ($response instanceof BinaryFileResponse) {
+            $size = $response->getFile()->getSize();
+
+            return is_int($size) ? $size : 0;
+        }
+
+        $content = $response->getContent();
+
+        return is_string($content) ? strlen($content) : 0;
     }
 
     /**
@@ -152,6 +213,51 @@ class ThrottleSmartMiddleware
 
         if (config('throttle-smart.response.detailed_errors', false)) {
             $response['error']['plan'] = $limits->plan;
+            $response['error']['upgrade_url'] = config('app.url').'/pricing';
+        }
+
+        return response()->json($response, 429, [
+            'Retry-After' => $retryAfter,
+        ]);
+    }
+
+    /**
+     * Build the response returned when the daily bandwidth quota is used up.
+     *
+     * @param  array{limit: int|null, used: int, remaining: int|null, exceeded: bool, key: string|null, resets_at: Carbon}  $bandwidth
+     */
+    protected function buildBandwidthExceededResponse(Request $request, array $bandwidth): JsonResponse
+    {
+        $resetsAt = $bandwidth['resets_at'];
+        $retryAfter = max(1, (int) ceil(Carbon::now()->diffInSeconds($resetsAt, true)));
+        $limit = $bandwidth['limit'] ?? 0;
+        $user = $request->user();
+
+        if ($user instanceof User) {
+            event(new QuotaExceeded(
+                user: $user,
+                quotaType: 'bandwidth',
+                limit: $limit,
+                used: $bandwidth['used'],
+                resetsAt: $resetsAt,
+            ));
+        }
+
+        $response = [
+            'success' => false,
+            'error' => [
+                'code' => 'BANDWIDTH_EXCEEDED',
+                'message' => "Daily bandwidth quota exceeded. Please retry after {$retryAfter} seconds.",
+                'type' => 'quota',
+                'quota_type' => 'bandwidth',
+                'limit' => $limit,
+                'used' => $bandwidth['used'],
+                'resets_at' => $resetsAt->toIso8601String(),
+                'retry_after' => $retryAfter,
+            ],
+        ];
+
+        if (config('throttle-smart.response.detailed_errors', false)) {
             $response['error']['upgrade_url'] = config('app.url').'/pricing';
         }
 

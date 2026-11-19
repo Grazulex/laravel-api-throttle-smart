@@ -18,6 +18,11 @@ use Throwable;
 
 class ThrottleSmartManager
 {
+    /**
+     * Number of bytes in one megabyte, used for "bandwidth_per_day_mb".
+     */
+    public const int BYTES_PER_MB = 1_048_576;
+
     protected ?Closure $planResolver = null;
 
     protected ?Closure $keyResolver = null;
@@ -300,6 +305,71 @@ class ThrottleSmartManager
         $ttl = is_array($concurrency) ? ($concurrency['ttl'] ?? 60) : 60;
 
         return is_numeric($ttl) ? max(1, (int) $ttl) : 60;
+    }
+
+    /**
+     * Get today's bandwidth usage for the plan "bandwidth_per_day_mb" limit.
+     *
+     * Sizes are in bytes. "limit", "remaining" and "key" are null when the plan
+     * has no bandwidth limit. Storage failures are reported and the usage is
+     * then considered to be 0. Add the size of a response to the counter with
+     * consumeBandwidth() using the returned "key".
+     *
+     * @return array{limit: int|null, used: int, remaining: int|null, exceeded: bool, key: string|null, resets_at: Carbon}
+     */
+    public function getBandwidth(mixed $user = null): array
+    {
+        $user = $user ?? $this->currentUser;
+        $limitMb = $this->getPlanConfig($this->resolvePlan($user))->bandwidthPerDayMb;
+        $resetsAt = Carbon::now()->addDay()->startOfDay();
+
+        if ($limitMb === null || $limitMb < 1) {
+            return [
+                'limit' => null,
+                'used' => 0,
+                'remaining' => null,
+                'exceeded' => false,
+                'key' => null,
+                'resets_at' => $resetsAt,
+            ];
+        }
+
+        $limit = $limitMb * self::BYTES_PER_MB;
+        $key = $this->buildBandwidthKey($user);
+
+        try {
+            $used = $this->driver->getQuota($key);
+        } catch (Throwable $e) {
+            report($e);
+            $used = 0;
+        }
+
+        return [
+            'limit' => $limit,
+            'used' => $used,
+            'remaining' => max(0, $limit - $used),
+            'exceeded' => $used >= $limit,
+            'key' => $key,
+            'resets_at' => $resetsAt,
+        ];
+    }
+
+    /**
+     * Add bytes to a daily bandwidth counter returned by getBandwidth().
+     *
+     * Storage failures are reported and never interrupt the request.
+     */
+    public function consumeBandwidth(string $key, int $bytes): void
+    {
+        if ($bytes < 1) {
+            return;
+        }
+
+        try {
+            $this->driver->incrementQuota($key, $bytes);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     /**
@@ -597,6 +667,17 @@ class ThrottleSmartManager
         $uri = $route instanceof Route ? $route->uri() : $request->path();
 
         return strtoupper($request->method()).' /'.ltrim($uri, '/');
+    }
+
+    /**
+     * Build the daily bandwidth counter key (one counter per scope and day).
+     */
+    protected function buildBandwidthKey(mixed $user): string
+    {
+        $baseKey = $this->resolveBaseKey($user);
+        $prefix = $this->getKeyPrefix();
+
+        return "{$prefix}bandwidth:{$baseKey}:".Carbon::now()->format('Y-m-d');
     }
 
     /**
