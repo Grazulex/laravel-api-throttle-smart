@@ -30,6 +30,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static void releaseConcurrencySlot(string $key, string $token)
  * @method static int getConcurrentRequests(mixed $user = null)
  * @method static int getConcurrencyTtl()
+ * @method static array{limit: int|null, used: int, remaining: int|null, exceeded: bool, key: string|null, resets_at: Carbon} getBandwidth(mixed $user = null)
+ * @method static void consumeBandwidth(string $key, int $bytes)
  * @method static self resolvePlanUsing(Closure $callback)
  * @method static self resolveKeyUsing(Closure $callback)
  * @method static self forUser(mixed $user)

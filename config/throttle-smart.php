@@ -48,6 +48,8 @@ return [
     |--------------------------------------------------------------------------
     | Define rate limits and quotas for each plan.
     | null = unlimited
+    | "bandwidth_per_day_mb" caps the size of the response bodies sent per
+    | day (counted once each response has been sent, reset at midnight).
     */
     'plans' => [
         'free' => [
@@ -283,7 +285,7 @@ return [
             'requests' => true,     // Requests that were allowed
             'limited' => true,      // Requests rejected by a rate limit
             'quota_usage' => true,  // Requests rejected because the quota is exceeded
-            'bandwidth' => false,   // Not recorded by the built-in drivers yet
+            'bandwidth' => false,   // Not recorded in analytics yet (the daily bandwidth quota is enforced regardless)
         ],
         'retention' => 90,
         'aggregation' => 'hourly',
