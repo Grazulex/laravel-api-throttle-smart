@@ -255,6 +255,16 @@ return [
     |--------------------------------------------------------------------------
     | Alerts & Notifications
     |--------------------------------------------------------------------------
+    | When enabled, RateLimitApproaching and QuotaThresholdReached are
+    | dispatched once the warning threshold is reached. The same alert (same
+    | key, limit and threshold level) is dispatched at most once per cooldown
+    | (in minutes, 0 disables the deduplication), tracked in the cache store
+    | given by 'store' (null uses the default store).
+    |
+    | Set 'send_notifications' to true to let the package deliver these alerts
+    | itself through 'channels' ('mail', 'slack'):
+    | - notify.user: mail to the email attribute of the user
+    | - notify.admin: mail to mail.to and a message to the Slack webhook
     */
     'alerts' => [
         'enabled' => env('THROTTLE_SMART_ALERTS', false),
@@ -264,9 +274,17 @@ return [
         ],
         'channels' => ['slack', 'mail'],
         'cooldown' => 15,
+        'store' => env('THROTTLE_SMART_ALERTS_STORE'),
+        'send_notifications' => env('THROTTLE_SMART_ALERTS_NOTIFICATIONS', false),
         'notify' => [
             'user' => true,
             'admin' => false,
+        ],
+        'mail' => [
+            'to' => env('THROTTLE_SMART_ALERTS_MAIL_TO'),
+        ],
+        'slack' => [
+            'webhook_url' => env('THROTTLE_SMART_ALERTS_SLACK_WEBHOOK'),
         ],
     ],
 

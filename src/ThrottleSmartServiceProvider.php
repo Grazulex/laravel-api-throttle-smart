@@ -15,7 +15,11 @@ use Grazulex\ThrottleSmart\Contracts\StorageDriverInterface;
 use Grazulex\ThrottleSmart\Drivers\CacheDriver;
 use Grazulex\ThrottleSmart\Drivers\DatabaseDriver;
 use Grazulex\ThrottleSmart\Drivers\RedisDriver;
+use Grazulex\ThrottleSmart\Events\QuotaThresholdReached;
+use Grazulex\ThrottleSmart\Events\RateLimitApproaching;
 use Grazulex\ThrottleSmart\Http\Middleware\ThrottleSmartMiddleware;
+use Grazulex\ThrottleSmart\Listeners\SendThrottleAlert;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
@@ -57,6 +61,19 @@ class ThrottleSmartServiceProvider extends ServiceProvider
 
         $this->registerMiddleware();
         $this->registerCommands();
+        $this->registerAlertListeners();
+    }
+
+    /**
+     * Register the listener that delivers alerts through the configured
+     * channels. It does nothing unless alerts.send_notifications is enabled.
+     */
+    protected function registerAlertListeners(): void
+    {
+        /** @var Dispatcher $events */
+        $events = $this->app->make(Dispatcher::class);
+        $events->listen(RateLimitApproaching::class, [SendThrottleAlert::class, 'handle']);
+        $events->listen(QuotaThresholdReached::class, [SendThrottleAlert::class, 'handle']);
     }
 
     protected function resolveDriver(Application $app): StorageDriverInterface

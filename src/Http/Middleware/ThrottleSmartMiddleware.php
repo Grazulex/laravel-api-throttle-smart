@@ -15,6 +15,7 @@ use Illuminate\Foundation\Auth\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Throwable;
@@ -377,21 +378,30 @@ class ThrottleSmartMiddleware
 
             if ($percentage >= $thresholds['warning'] && $user) {
                 $threshold = $percentage >= $thresholds['critical'] ? 'critical' : 'warning';
-                event(new RateLimitApproaching(
-                    key: $this->getKeyForRequest($request),
-                    plan: $limits->plan,
-                    limitType: 'minute',
-                    limit: $primaryLimit['limit'],
-                    used: $used,
-                    percentage: $percentage,
-                    user: $user,
-                ));
+                $key = $this->getKeyForRequest($request);
+
+                if ($this->claimAlert("rate_limit:{$key}:minute:{$threshold}", $alertConfig)) {
+                    event(new RateLimitApproaching(
+                        key: $key,
+                        plan: $limits->plan,
+                        limitType: 'minute',
+                        limit: $primaryLimit['limit'],
+                        used: $used,
+                        percentage: $percentage,
+                        user: $user,
+                    ));
+                }
             }
         }
 
         // Check quota thresholds
         if ($user && $quota->percentageUsed >= $thresholds['warning']) {
             $threshold = $quota->percentageUsed >= $thresholds['critical'] ? 'critical' : 'warning';
+
+            if (! $this->claimAlert("quota:{$this->getKeyForRequest($request)}:monthly:{$threshold}", $alertConfig)) {
+                return;
+            }
+
             event(new QuotaThresholdReached(
                 user: $user,
                 quotaType: 'monthly',
@@ -400,6 +410,35 @@ class ThrottleSmartMiddleware
                 percentage: $quota->percentageUsed,
                 threshold: $threshold,
             ));
+        }
+    }
+
+    /**
+     * Claim the right to dispatch an alert, at most once per cooldown period.
+     *
+     * A cache entry living for the cooldown (in minutes) marks the alert as
+     * sent. A cooldown of 0 disables the deduplication. When the cache cannot
+     * be reached, the alert is dispatched.
+     *
+     * @param  mixed  $alertConfig  The throttle-smart.alerts configuration
+     */
+    protected function claimAlert(string $id, mixed $alertConfig): bool
+    {
+        $cooldown = is_array($alertConfig) && is_numeric($alertConfig['cooldown'] ?? null)
+            ? (int) $alertConfig['cooldown']
+            : 15;
+
+        if ($cooldown <= 0) {
+            return true;
+        }
+
+        $store = is_array($alertConfig) ? ($alertConfig['store'] ?? null) : null;
+
+        try {
+            return Cache::store(is_string($store) && $store !== '' ? $store : null)
+                ->add('throttle-smart:alert:'.$id, true, $cooldown * 60);
+        } catch (Throwable) {
+            return true;
         }
     }
 
