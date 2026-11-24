@@ -31,7 +31,7 @@
         "illuminate/redis": "^12.0|^13.0"
     },
     "require-dev": {
-        "larastan/larastan": "^3.14",
+        "larastan/larastan": "^3.15",
         "laravel/pint": "^1.32",
         "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^3.8|^4.7|^5.3",
